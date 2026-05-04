@@ -13,6 +13,7 @@ _CEO_PATTERNS = [
     re.compile(rf'(?i:founded by) \[?({_NAME})'),
     re.compile(rf'(?i:founded in \d{{4}} by) \[?({_NAME})'),
     re.compile(rf'({_NAME}),? (?i:CEO|Chief Executive)'),
+    re.compile(rf'({_NAME})\s+(?i:President\s*(?:&|and)\s*CEO)'),
     re.compile(rf'({_NAME})\s+(?i:entrepreneur,\s+)?(?i:co-founder|founder)\b'),
     re.compile(rf'({_NAME})\s+##\s+(?i:co-founder|founder)\b'),
 ]
@@ -51,7 +52,7 @@ def extract_ceo_name_from_results(
     candidates: dict[str, tuple[int, int, int, str]] = {}
 
     for index, r in enumerate(results):
-        text = f"{r.title} {r.excerpt}"
+        text = re.sub(r'\s+', ' ', f"{r.title} {r.excerpt}")
         for pattern in _CEO_PATTERNS:
             match = pattern.search(text)
             if match:
