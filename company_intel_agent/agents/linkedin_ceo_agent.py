@@ -15,6 +15,8 @@ _TITLE_PATTERNS = [
     re.compile(r'([A-Za-z\s]+) at \w', re.IGNORECASE),
 ]
 
+_LINKEDIN_PROFILE_PATTERN = re.compile(r'https?://(?:[a-z]{2,3}\.)?linkedin\.com/in/([^/\s,\'"<>()]+)')
+
 
 class LinkedInCEOAgent:
     def __init__(self):
@@ -62,11 +64,20 @@ class LinkedInCEOAgent:
 
     def _extract_linkedin_profile_url(self, results: list[SearchResult]) -> Optional[str]:
         for r in results:
-            if 'linkedin.com/in/' in r.url:
-                parsed = urlparse(r.url)
-                parts = parsed.path.strip('/').split('/')
-                if len(parts) >= 2 and parts[0] == 'in':
-                    return f"https://www.linkedin.com/in/{parts[1]}/"
+            linkedin_url = self._normalize_linkedin_profile_url(r.url)
+            if linkedin_url:
+                return linkedin_url
+            for match in _LINKEDIN_PROFILE_PATTERN.finditer(r.excerpt):
+                return f"https://www.linkedin.com/in/{match.group(1).strip('/')}/"
+        return None
+
+    def _normalize_linkedin_profile_url(self, url: str) -> Optional[str]:
+        if 'linkedin.com/in/' not in url:
+            return None
+        parsed = urlparse(url)
+        parts = parsed.path.strip('/').split('/')
+        if len(parts) >= 2 and parts[0] == 'in':
+            return f"https://www.linkedin.com/in/{parts[1]}/"
         return None
 
     def _extract_title(self, results: list[SearchResult], ceo_name: str) -> Optional[str]:

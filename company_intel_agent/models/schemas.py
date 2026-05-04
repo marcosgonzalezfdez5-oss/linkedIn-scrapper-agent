@@ -6,6 +6,7 @@ class CompanyData(BaseModel):
     name: str
     linkedin: Optional[str] = None
     website: Optional[str] = None
+    website_confidence: Optional[str] = None  # "high" | "medium" | "low"
     description: Optional[str] = None
     size: Optional[str] = None
 
