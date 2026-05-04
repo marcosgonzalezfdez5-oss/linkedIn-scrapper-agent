@@ -15,6 +15,7 @@ class CEOData(BaseModel):
     linkedin: Optional[str] = None
     title: Optional[str] = None
     summary: Optional[str] = None
+    confidence: Optional[str] = None  # "high" | "medium" | "low"
 
 
 class NewsItem(BaseModel):
