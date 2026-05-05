@@ -1,15 +1,14 @@
 """
-Orchestrator — coordinates the three sub-agents:
+Orchestrator coordinates company lookup, CEO lookup, and news lookup.
 
-  1. LinkedInCompanyAgent  (sequential, first — CEO name needed for step 2)
-  2. LinkedInCEOAgent  ┐
-                        ├─ run in parallel via asyncio.gather
-  3. NewsAgent         ┘
+Company and CEO LinkedIn data use Apify first, then silently fall back to the
+existing Parallel-backed agents. News remains Parallel-backed.
 """
 import asyncio
-import json
 from typing import Optional
 
+from company_intel_agent.agents.apify_company_agent import ApifyCompanyAgent
+from company_intel_agent.agents.apify_ceo_agent import ApifyCEOAgent
 from company_intel_agent.agents.linkedin_company_agent import LinkedInCompanyAgent
 from company_intel_agent.agents.linkedin_ceo_agent import LinkedInCEOAgent
 from company_intel_agent.agents.news_agent import NewsAgent
@@ -21,6 +20,8 @@ logger = get_logger("Orchestrator")
 
 class OrchestratorAgent:
     def __init__(self):
+        self._apify_company_agent = ApifyCompanyAgent()
+        self._apify_ceo_agent = ApifyCEOAgent()
         self._company_agent = LinkedInCompanyAgent()
         self._ceo_agent = LinkedInCEOAgent()
         self._news_agent = NewsAgent()
@@ -29,16 +30,27 @@ class OrchestratorAgent:
         company_name = company_name.strip()
         logger.info(f"=== Starting research for: '{company_name}' ===")
 
-        # Step 1: Company LinkedIn — must run first to discover the CEO name
-        company_data = await self._company_agent.find(company_name)
-        ceo_name: Optional[str] = self._company_agent._ceo_name
-        logger.info(f"CEO discovered: {ceo_name!r}")
+        company_data = await self._apify_company_agent.find(company_name)
+        ceo_linkedin: Optional[str] = self._apify_company_agent._ceo_linkedin
+        ceo_name: Optional[str] = self._apify_company_agent._ceo_name
 
-        # Step 2 & 3: CEO LinkedIn + News — run concurrently
+        if company_data is None:
+            company_data = await self._company_agent.find(company_name)
+            ceo_name = self._company_agent._ceo_name
+            ceo_linkedin = None
+
+        logger.info(f"CEO discovered: name={ceo_name!r}, linkedin={ceo_linkedin!r}")
+
         async def _get_ceo_data() -> CEOData:
+            if ceo_linkedin:
+                ceo_data = await self._apify_ceo_agent.find(ceo_linkedin)
+                if ceo_data is not None:
+                    return ceo_data
+
             if ceo_name:
                 return await self._ceo_agent.find(ceo_name, company_name)
-            logger.info("No CEO name found — skipping CEO LinkedIn lookup")
+
+            logger.info("No CEO name found; skipping CEO LinkedIn lookup")
             return CEOData()
 
         ceo_data, news_items = await asyncio.gather(

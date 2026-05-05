@@ -30,3 +30,11 @@ SEARCH_MAX_RESULTS = 8
 
 SUPABASE_URL: str = _get('SUPABASE_URL')
 SUPABASE_KEY: str = _get('SUPABASE_KEY')
+
+# Optional. When absent or invalid, Apify-backed agents fall back to the
+# existing Parallel search agents.
+APIFY_TOKEN: str = _get('APIFY_TOKEN')
+APIFY_COMPANY_ACTOR_ID: str = _get('APIFY_COMPANY_ACTOR_ID') or 'curious_coder/linkedin-company-scraper'
+APIFY_PROFILE_ACTOR_ID: str = _get('APIFY_PROFILE_ACTOR_ID') or 'curious_coder/linkedin-profile-scraper'
+APIFY_COMPANY_INPUT_FIELD: str = _get('APIFY_COMPANY_INPUT_FIELD') or 'companyName'
+APIFY_PROFILE_INPUT_FIELD: str = _get('APIFY_PROFILE_INPUT_FIELD') or 'profileUrl'
