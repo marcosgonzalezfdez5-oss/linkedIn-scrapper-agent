@@ -8,6 +8,7 @@ import json
 import sys
 
 from company_intel_agent.orchestrator.main_agent import OrchestratorAgent
+from company_intel_agent.utils.db import save_result
 
 
 async def main() -> None:
@@ -22,6 +23,7 @@ async def main() -> None:
 
     agent = OrchestratorAgent()
     result = await agent.run(company)
+    save_result(company, result)
     print(json.dumps(result, indent=2, ensure_ascii=False))
 
 

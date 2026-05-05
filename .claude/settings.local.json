@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\Marcos\\\\Documents\\\\Projects\\\\linkedIn-scrapper-agent\" -Recurse -Force)",
+      "Bash(Select-Object FullName)",
+      "Bash(Sort-Object FullName)"
+    ]
+  }
+}
