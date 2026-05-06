@@ -14,6 +14,8 @@ from company_intel_agent.agents.linkedin_ceo_agent import LinkedInCEOAgent
 from company_intel_agent.agents.news_agent import NewsAgent
 from company_intel_agent.models.schemas import CEOData, CompanyIntelligence
 from company_intel_agent.utils.logger import get_logger
+from company_intel_agent.utils.names import extract_ceo_name_from_results
+from company_intel_agent.utils.search import ParallelSearchClient
 
 logger = get_logger("Orchestrator")
 
@@ -31,26 +33,23 @@ class OrchestratorAgent:
         logger.info(f"=== Starting research for: '{company_name}' ===")
 
         company_data = await self._apify_company_agent.find(company_name)
-        ceo_linkedin: Optional[str] = self._apify_company_agent._ceo_linkedin
-        ceo_name: Optional[str] = self._apify_company_agent._ceo_name
 
         if company_data is None:
             company_data = await self._company_agent.find(company_name)
             ceo_name = self._company_agent._ceo_name
-            ceo_linkedin = None
+        else:
+            ceo_name = await self._discover_ceo_name(company_name)
 
-        logger.info(f"CEO discovered: name={ceo_name!r}, linkedin={ceo_linkedin!r}")
+        logger.info(f"CEO discovered: name={ceo_name!r}")
 
         async def _get_ceo_data() -> CEOData:
-            if ceo_linkedin:
-                ceo_data = await self._apify_ceo_agent.find(ceo_linkedin)
+            if ceo_name:
+                ceo_data = await self._apify_ceo_agent.find(ceo_name, company_name)
                 if ceo_data is not None:
                     return ceo_data
-
-            if ceo_name:
                 return await self._ceo_agent.find(ceo_name, company_name)
 
-            logger.info("No CEO name found; skipping CEO LinkedIn lookup")
+            logger.info("No CEO name found; skipping CEO lookup")
             return CEOData()
 
         ceo_data, news_items = await asyncio.gather(
@@ -66,6 +65,20 @@ class OrchestratorAgent:
 
         logger.info("=== Research complete ===")
         return result.model_dump()
+
+    async def _discover_ceo_name(self, company_name: str) -> Optional[str]:
+        search = ParallelSearchClient()
+        results = await asyncio.to_thread(
+            search.search,
+            objective=f"Who is the current CEO or founder of {company_name}?",
+            queries=[
+                f"{company_name} CEO founder",
+                f"current CEO of {company_name}",
+            ],
+        )
+        name = extract_ceo_name_from_results(results, company_name)
+        logger.info(f"Discovered CEO name from web: {name!r}")
+        return name
 
     def run_sync(self, company_name: str) -> dict:
         """Convenience wrapper for non-async callers."""

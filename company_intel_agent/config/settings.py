@@ -36,5 +36,5 @@ SUPABASE_KEY: str = _get('SUPABASE_KEY')
 APIFY_TOKEN: str = _get('APIFY_TOKEN')
 APIFY_COMPANY_ACTOR_ID: str = _get('APIFY_COMPANY_ACTOR_ID') or 'curious_coder/linkedin-company-scraper'
 APIFY_PROFILE_ACTOR_ID: str = _get('APIFY_PROFILE_ACTOR_ID') or 'curious_coder/linkedin-profile-scraper'
-APIFY_COMPANY_INPUT_FIELD: str = _get('APIFY_COMPANY_INPUT_FIELD') or 'companyName'
-APIFY_PROFILE_INPUT_FIELD: str = _get('APIFY_PROFILE_INPUT_FIELD') or 'profileUrl'
+APIFY_COMPANY_INPUT_FIELD: str = _get('APIFY_COMPANY_INPUT_FIELD') or 'url'
+APIFY_PROFILE_INPUT_FIELD: str = _get('APIFY_PROFILE_INPUT_FIELD') or 'profileUrls'
