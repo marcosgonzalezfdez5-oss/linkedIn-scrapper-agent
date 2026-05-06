@@ -69,7 +69,19 @@ class ApifyCEOAgent:
 
         logger.info(f"Calling Apify profile actor: {settings.APIFY_PROFILE_ACTOR_ID} (input: {linkedin_url})")
         run = client.actor(settings.APIFY_PROFILE_ACTOR_ID).call(
-            run_input={settings.APIFY_PROFILE_INPUT_FIELD: [linkedin_url]}
+            run_input={
+                settings.APIFY_PROFILE_INPUT_FIELD: [linkedin_url],
+                "includeExperience": True,
+                "includeEducation": True,
+                "includeSkills": False,
+                "slowMode": False,
+                "maxConcurrency": 5,
+                "cookie": None,
+                "proxyConfiguration": {
+                    "useApifyProxy": True,
+                    "apifyProxyGroups": ["RESIDENTIAL"],
+                },
+            }
         )
         if not run or not run.get("defaultDatasetId"):
             return []

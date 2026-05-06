@@ -73,7 +73,13 @@ class ApifyCompanyAgent:
 
         logger.info(f"Calling Apify company actor: {settings.APIFY_COMPANY_ACTOR_ID} (input: {linkedin_url})")
         run = client.actor(settings.APIFY_COMPANY_ACTOR_ID).call(
-            run_input={settings.APIFY_COMPANY_INPUT_FIELD: linkedin_url}
+            run_input={
+                settings.APIFY_COMPANY_INPUT_FIELD: [linkedin_url],
+                "maxResults": 1,
+                "maxConcurrency": 2,
+                "requestDelay": 5,
+                "proxyConfiguration": {"useApifyProxy": True},
+            }
         )
         if not run or not run.get("defaultDatasetId"):
             return []
