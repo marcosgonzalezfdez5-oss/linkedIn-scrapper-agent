@@ -13,6 +13,7 @@ from company_intel_agent.agents.linkedin_company_agent import LinkedInCompanyAge
 from company_intel_agent.agents.linkedin_ceo_agent import LinkedInCEOAgent
 from company_intel_agent.agents.news_agent import NewsAgent
 from company_intel_agent.models.schemas import CEOData, CompanyIntelligence
+from company_intel_agent.config import settings
 from company_intel_agent.utils.logger import get_logger
 from company_intel_agent.utils.names import extract_ceo_name_from_results
 from company_intel_agent.utils.search import ParallelSearchClient
@@ -31,6 +32,7 @@ class OrchestratorAgent:
     async def run(self, company_name: str) -> dict:
         company_name = company_name.strip()
         logger.info(f"=== Starting research for: '{company_name}' ===")
+        logger.info(f"Apify actors: {'enabled' if settings.APIFY_TOKEN else 'disabled (APIFY_TOKEN not set — using Parallel fallback)'}")
 
         company_data = await self._apify_company_agent.find(company_name)
 

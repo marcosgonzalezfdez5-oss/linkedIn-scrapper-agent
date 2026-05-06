@@ -67,6 +67,7 @@ class ApifyCEOAgent:
         if client is None:
             return []
 
+        logger.info(f"Calling Apify profile actor: {settings.APIFY_PROFILE_ACTOR_ID} (input: {linkedin_url})")
         run = client.actor(settings.APIFY_PROFILE_ACTOR_ID).call(
             run_input={settings.APIFY_PROFILE_INPUT_FIELD: [linkedin_url]}
         )
