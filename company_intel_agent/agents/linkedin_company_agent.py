@@ -25,9 +25,8 @@ class LinkedInCompanyAgent:
     def __init__(self):
         self._search = ParallelSearchClient()
         self._website_verifier = WebsiteVerifier()
-        self._ceo_name: Optional[str] = None  # read by orchestrator after find()
 
-    async def find(self, company_name: str) -> CompanyData:
+    async def find(self, company_name: str) -> tuple[CompanyData, Optional[str]]:
         logger.info(f"Searching company intelligence for: '{company_name}'")
 
         # Three searches run in parallel
@@ -74,8 +73,6 @@ class LinkedInCompanyAgent:
         description = self._extract_description(meta_res + linkedin_res, company_name)
         size = self._extract_size(size_res + meta_res)
 
-        self._ceo_name = ceo_name
-
         # Verify and correct the website independently of other extractions
         site_result = await self._website_verifier.verify(company_name, raw_website)
         if site_result.url != raw_website:
@@ -89,7 +86,7 @@ class LinkedInCompanyAgent:
             f"[{site_result.confidence}], ceo={ceo_name}, size={size}"
         )
 
-        return CompanyData(
+        company_data = CompanyData(
             name=company_name,
             linkedin=linkedin_url,
             website=site_result.url,
@@ -97,6 +94,7 @@ class LinkedInCompanyAgent:
             description=description,
             size=size,
         )
+        return company_data, ceo_name
 
     # ── helpers ──────────────────────────────────────────────────────────────
 
