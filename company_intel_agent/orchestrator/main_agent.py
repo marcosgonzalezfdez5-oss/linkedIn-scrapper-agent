@@ -82,6 +82,19 @@ class OrchestratorAgent:
         logger.info(f"Discovered CEO name from web: {name!r}")
         return name
 
+    async def run_many(self, names: list[str], concurrency: int = 7) -> list[dict]:
+        sem = asyncio.Semaphore(concurrency)
+
+        async def _one(name: str) -> dict:
+            async with sem:
+                try:
+                    return {"input": name, "ok": True, "result": await self.run(name)}
+                except Exception as e:
+                    logger.error(f"Run failed for {name!r}: {e}")
+                    return {"input": name, "ok": False, "error": str(e)}
+
+        return list(await asyncio.gather(*(_one(n) for n in names)))
+
     def run_sync(self, company_name: str) -> dict:
         """Convenience wrapper for non-async callers."""
         return asyncio.run(self.run(company_name))
