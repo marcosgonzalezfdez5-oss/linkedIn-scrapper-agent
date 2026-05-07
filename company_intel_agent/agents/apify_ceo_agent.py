@@ -1,16 +1,18 @@
 import asyncio
 import re
 from typing import Any, Optional
+from urllib.parse import urlparse
 
 from company_intel_agent.config import settings
 from company_intel_agent.models.schemas import CEOData
 from company_intel_agent.utils.apify_client import get_apify_client
 from company_intel_agent.utils.logger import get_logger
-from company_intel_agent.utils.verifier import CEOVerifier
+from company_intel_agent.utils.search import ParallelSearchClient
 
 logger = get_logger("ApifyCEOAgent")
 
 _LEGAL_SUFFIXES = {"inc", "llc", "ltd", "corp", "co", "company", "gmbh", "sa", "ag", "plc"}
+_LINKEDIN_PROFILE_PATTERN = re.compile(r'https?://(?:[a-z]{2,3}\.)?linkedin\.com/in/([^/\s,\'"<>()]+)')
 
 
 def _normalize_company(name: str) -> set[str]:
@@ -20,17 +22,19 @@ def _normalize_company(name: str) -> set[str]:
 
 class ApifyCEOAgent:
     def __init__(self):
-        self._verifier = CEOVerifier()
+        self._search = ParallelSearchClient()
 
-    async def find(self, ceo_name: str, company_name: str) -> CEOData | None:
+    async def find(self, ceo_name: str, company_name: str) -> tuple[CEOData | None, str | None]:
+        """Return (CEOData, None) on success, (None, rejected_url) when the scraped profile's
+        company doesn't match, or (None, None) for all other failure/unavailable cases."""
         if not settings.APIFY_TOKEN:
             logger.info("APIFY_TOKEN not configured; using Parallel CEO fallback")
-            return None
+            return None, None
 
-        linkedin_url = await self._verifier._find_linkedin_url(ceo_name, company_name)
+        linkedin_url = await self._discover_linkedin_url(ceo_name, company_name)
         if not linkedin_url:
             logger.info(f"No LinkedIn URL found for '{ceo_name}' — skipping Apify profile scrape")
-            return None
+            return None, None
 
         logger.info(f"Discovered LinkedIn URL for '{ceo_name}': {linkedin_url}")
 
@@ -38,11 +42,11 @@ class ApifyCEOAgent:
             items = await asyncio.to_thread(self._run_actor, linkedin_url)
         except Exception as exc:
             logger.warning(f"Apify CEO lookup failed; using fallback: {exc}")
-            return None
+            return None, None
 
         if not items:
             logger.info("Apify CEO lookup returned no items; using fallback")
-            return None
+            return None, None
 
         item = items[0]
 
@@ -50,9 +54,19 @@ class ApifyCEOAgent:
         if not self._company_matches(company_name, scraped_company):
             logger.warning(
                 f"Profile current_company='{scraped_company}' does not match target "
-                f"'{company_name}' — discarding Apify result"
+                f"'{company_name}' — discarding Apify result and flagging URL for suppression"
             )
-            return None
+            return None, linkedin_url
+
+        verified = self._pick(item, "verified", "isVerified")
+        if verified is None:
+            verification_obj = item.get("verification")
+            if isinstance(verification_obj, dict):
+                verified = verification_obj.get("verified") or verification_obj.get("isVerified")
+        if isinstance(verified, str):
+            verified = verified.lower() in ("true", "yes", "1")
+
+        logger.info(f"LinkedIn verified status for '{ceo_name}': {verified}")
 
         return CEOData(
             name=self._pick(item, "fullName", "name", "full_name"),
@@ -60,7 +74,49 @@ class ApifyCEOAgent:
             title=self._pick(item, "currentTitle", "headline", "title", "position", "occupation"),
             summary=self._pick(item, "summary", "about", "bio", "description"),
             confidence="high",
+            verified=bool(verified) if verified is not None else None,
+        ), None
+
+    async def _discover_linkedin_url(self, name: str, company: str) -> Optional[str]:
+        """Find a LinkedIn profile URL for the CEO — no slug-match filter because
+        the Apify actor verifies company match directly from the scraped profile."""
+        results = await asyncio.to_thread(
+            self._search.search,
+            objective=f"LinkedIn profile for {name}, CEO of {company}",
+            queries=[
+                f"{name} {company} site:linkedin.com/in",
+                f"{name} CEO LinkedIn profile",
+            ],
         )
+        for r in results:
+            if 'linkedin.com/in/' in r.url:
+                parts = urlparse(r.url).path.strip('/').split('/')
+                if len(parts) >= 2 and parts[0] == 'in':
+                    return f"https://www.linkedin.com/in/{parts[1]}/"
+            for match in _LINKEDIN_PROFILE_PATTERN.finditer(r.excerpt):
+                return f"https://www.linkedin.com/in/{match.group(1).strip('/')}/"
+        return None
+
+    async def verify_url(self, linkedin_url: str, company_name: str) -> bool:
+        """Scrape linkedin_url and verify that current_company matches company_name.
+        Returns True (accept) if the company matches or if verification is unavailable.
+        Returns False (reject) only when the actor explicitly returns a mismatched company."""
+        if not settings.APIFY_TOKEN:
+            return True
+        logger.info(f"Secondary Apify verification for URL: {linkedin_url}")
+        try:
+            items = await asyncio.to_thread(self._run_actor, linkedin_url)
+        except Exception as exc:
+            logger.warning(f"Secondary Apify verification failed; keeping URL: {exc}")
+            return True
+        if not items:
+            logger.info("Secondary Apify verification returned no items — keeping URL")
+            return True
+        item = items[0]
+        scraped_company = self._pick(item, "currentCompany", "current_company", "company", "companyName")
+        matches = self._company_matches(company_name, scraped_company)
+        logger.info(f"Secondary verification: current_company='{scraped_company}', matches={matches}")
+        return matches
 
     def _run_actor(self, linkedin_url: str) -> list[dict[str, Any]]:
         client = get_apify_client()
@@ -76,7 +132,6 @@ class ApifyCEOAgent:
                 "includeSkills": False,
                 "slowMode": False,
                 "maxConcurrency": 5,
-                "cookie": None,
                 "proxyConfiguration": {
                     "useApifyProxy": True,
                     "apifyProxyGroups": ["RESIDENTIAL"],

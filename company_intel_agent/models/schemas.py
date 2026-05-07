@@ -17,6 +17,7 @@ class CEOData(BaseModel):
     title: Optional[str] = None
     summary: Optional[str] = None
     confidence: Optional[str] = None  # "high" | "medium" | "low"
+    verified: Optional[bool] = None   # LinkedIn identity verification badge
 
 
 class NewsItem(BaseModel):

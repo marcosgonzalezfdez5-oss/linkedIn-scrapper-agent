@@ -18,7 +18,16 @@ def read_company_names(path: str | Path) -> list[str]:
     with p.open(newline="", encoding="utf-8-sig") as f:
         sample = f.read(2048)
         f.seek(0)
-        has_header = csv.Sniffer().has_header(sample) if sample.strip() else False
+        if sample.strip():
+            try:
+                has_header = csv.Sniffer().has_header(sample)
+            except csv.Error:
+                # Single-column CSVs have no delimiter for the sniffer to detect;
+                # fall back to checking if the first cell matches a known header name.
+                first_cell = sample.splitlines()[0].strip().lower() if sample.splitlines() else ""
+                has_header = first_cell in PREFERRED_HEADERS
+        else:
+            has_header = False
         reader = csv.reader(f)
         rows = list(reader)
 

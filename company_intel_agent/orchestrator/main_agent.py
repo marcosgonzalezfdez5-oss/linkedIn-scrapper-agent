@@ -21,6 +21,13 @@ from company_intel_agent.utils.search import ParallelSearchClient
 logger = get_logger("Orchestrator")
 
 
+def _urls_equivalent(a: str, b: str) -> bool:
+    """Compare two LinkedIn profile URLs ignoring scheme, www., and trailing slash."""
+    def _norm(u: str) -> str:
+        return u.lower().replace('https://', '').replace('http://', '').replace('www.', '').rstrip('/')
+    return _norm(a) == _norm(b)
+
+
 class OrchestratorAgent:
     def __init__(self):
         self._apify_company_agent = ApifyCompanyAgent()
@@ -45,14 +52,33 @@ class OrchestratorAgent:
         logger.info(f"CEO discovered: name={ceo_name!r}")
 
         async def _get_ceo_data() -> CEOData:
-            if ceo_name:
-                ceo_data = await self._apify_ceo_agent.find(ceo_name, company_name)
-                if ceo_data is not None:
-                    return ceo_data
-                return await self._ceo_agent.find(ceo_name, company_name)
+            if not ceo_name:
+                logger.info("No CEO name found; skipping CEO lookup")
+                return CEOData()
 
-            logger.info("No CEO name found; skipping CEO lookup")
-            return CEOData()
+            apify_data, rejected_url = await self._apify_ceo_agent.find(ceo_name, company_name)
+            if apify_data is not None:
+                return apify_data
+
+            fallback = await self._ceo_agent.find(ceo_name, company_name)
+
+            if fallback.linkedin:
+                if rejected_url and _urls_equivalent(rejected_url, fallback.linkedin):
+                    logger.info(
+                        f"Suppressing LinkedIn '{fallback.linkedin}' — already rejected by Apify "
+                        "(profile current_company does not match target)"
+                    )
+                    fallback = fallback.model_copy(update={"linkedin": None, "confidence": "medium"})
+                else:
+                    # Fallback found a URL not previously checked — verify it with Apify
+                    url_ok = await self._apify_ceo_agent.verify_url(fallback.linkedin, company_name)
+                    if not url_ok:
+                        logger.info(
+                            f"Suppressing LinkedIn '{fallback.linkedin}' — rejected by secondary Apify verification"
+                        )
+                        fallback = fallback.model_copy(update={"linkedin": None, "confidence": "medium"})
+
+            return fallback
 
         ceo_data, news_items = await asyncio.gather(
             _get_ceo_data(),

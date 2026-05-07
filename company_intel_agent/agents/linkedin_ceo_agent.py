@@ -90,15 +90,16 @@ class LinkedInCEOAgent:
         return "CEO"
 
     def _extract_summary(self, results: list[SearchResult], ceo_name: str) -> Optional[str]:
-        first_name = ceo_name.split()[0]
+        parts = ceo_name.split()
+        if len(parts) < 2:
+            return None
+        first, last = parts[0].lower(), parts[-1].lower()
         for r in results:
             excerpt = r.excerpt.strip()
-            if len(excerpt) > 80 and first_name.lower() in excerpt.lower():
+            text = excerpt.lower()
+            if len(excerpt) > 80 and first in text and last in text:
                 if len(excerpt) > 300:
                     cut = excerpt[:300].rfind('.')
                     excerpt = excerpt[:cut + 1] if cut > 100 else excerpt[:300]
                 return excerpt
-        for r in results:
-            if len(r.excerpt.strip()) > 60:
-                return r.excerpt.strip()[:300]
         return None

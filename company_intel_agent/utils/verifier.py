@@ -128,7 +128,10 @@ class CEOVerifier:
             if corrected_url:
                 reasons.append(f"Corrected LinkedIn URL: {corrected_url}")
             else:
-                reasons.append("Could not find a slug-matching LinkedIn profile")
+                reasons.append(
+                    f"No company-corroborated LinkedIn profile found for '{corrected_name}' at '{company_name}' "
+                    "— person may not have a LinkedIn account"
+                )
         elif not is_plausible_person_name(corrected_name):
             reasons.append(f"'{corrected_name}' is not a plausible person name - skipping LinkedIn correction")
             corrected_name = None

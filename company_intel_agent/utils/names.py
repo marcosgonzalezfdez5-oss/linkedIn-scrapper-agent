@@ -52,6 +52,8 @@ def extract_ceo_name_from_results(
     candidates: dict[str, tuple[int, int, int, str]] = {}
 
     for index, r in enumerate(results):
+        if company_name and _company_match_score(r, company_name) == 0:
+            continue
         text = re.sub(r'\s+', ' ', f"{r.title} {r.excerpt}")
         for pattern in _CEO_PATTERNS:
             match = pattern.search(text)
