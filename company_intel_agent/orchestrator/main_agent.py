@@ -44,8 +44,7 @@ class OrchestratorAgent:
         company_data = await self._apify_company_agent.find(company_name)
 
         if company_data is None:
-            company_data = await self._company_agent.find(company_name)
-            ceo_name = self._company_agent._ceo_name
+            company_data, ceo_name = await self._company_agent.find(company_name)
         else:
             ceo_name = await self._discover_ceo_name(company_name)
 
@@ -56,7 +55,10 @@ class OrchestratorAgent:
                 logger.info("No CEO name found; skipping CEO lookup")
                 return CEOData()
 
-            apify_data, rejected_url = await self._apify_ceo_agent.find(ceo_name, company_name)
+            apify_data, rejected_url = await self._apify_ceo_agent.find(
+                ceo_name, company_name,
+                company_linkedin_url=company_data.linkedin,
+            )
             if apify_data is not None:
                 return apify_data
 
@@ -71,7 +73,10 @@ class OrchestratorAgent:
                     fallback = fallback.model_copy(update={"linkedin": None, "confidence": "medium"})
                 else:
                     # Fallback found a URL not previously checked — verify it with Apify
-                    url_ok = await self._apify_ceo_agent.verify_url(fallback.linkedin, company_name)
+                    url_ok = await self._apify_ceo_agent.verify_url(
+                        fallback.linkedin, company_name,
+                        company_linkedin_url=company_data.linkedin,
+                    )
                     if not url_ok:
                         logger.info(
                             f"Suppressing LinkedIn '{fallback.linkedin}' — rejected by secondary Apify verification"

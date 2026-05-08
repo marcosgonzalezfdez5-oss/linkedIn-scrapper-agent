@@ -24,7 +24,12 @@ class ApifyCEOAgent:
     def __init__(self):
         self._search = ParallelSearchClient()
 
-    async def find(self, ceo_name: str, company_name: str) -> tuple[CEOData | None, str | None]:
+    async def find(
+        self,
+        ceo_name: str,
+        company_name: str,
+        company_linkedin_url: Optional[str] = None,
+    ) -> tuple[CEOData | None, str | None]:
         """Return (CEOData, None) on success, (None, rejected_url) when the scraped profile's
         company doesn't match, or (None, None) for all other failure/unavailable cases."""
         if not settings.APIFY_TOKEN:
@@ -51,7 +56,12 @@ class ApifyCEOAgent:
         item = items[0]
 
         scraped_company = self._pick(item, "currentCompany", "current_company", "company", "companyName")
-        if not self._company_matches(company_name, scraped_company):
+        scraped_company_url = self._extract_scraped_company_url(item)
+        if not self._company_matches(
+            company_name, scraped_company,
+            target_url=company_linkedin_url,
+            scraped_url=scraped_company_url,
+        ):
             logger.warning(
                 f"Profile current_company='{scraped_company}' does not match target "
                 f"'{company_name}' — discarding Apify result and flagging URL for suppression"
@@ -97,7 +107,12 @@ class ApifyCEOAgent:
                 return f"https://www.linkedin.com/in/{match.group(1).strip('/')}/"
         return None
 
-    async def verify_url(self, linkedin_url: str, company_name: str) -> bool:
+    async def verify_url(
+        self,
+        linkedin_url: str,
+        company_name: str,
+        company_linkedin_url: Optional[str] = None,
+    ) -> bool:
         """Scrape linkedin_url and verify that current_company matches company_name.
         Returns True (accept) if the company matches or if verification is unavailable.
         Returns False (reject) only when the actor explicitly returns a mismatched company."""
@@ -114,8 +129,16 @@ class ApifyCEOAgent:
             return True
         item = items[0]
         scraped_company = self._pick(item, "currentCompany", "current_company", "company", "companyName")
-        matches = self._company_matches(company_name, scraped_company)
-        logger.info(f"Secondary verification: current_company='{scraped_company}', matches={matches}")
+        scraped_company_url = self._extract_scraped_company_url(item)
+        matches = self._company_matches(
+            company_name, scraped_company,
+            target_url=company_linkedin_url,
+            scraped_url=scraped_company_url,
+        )
+        logger.info(
+            f"Secondary verification: current_company='{scraped_company}' "
+            f"company_url='{scraped_company_url}', matches={matches}"
+        )
         return matches
 
     def _run_actor(self, linkedin_url: str) -> list[dict[str, Any]]:
@@ -142,12 +165,75 @@ class ApifyCEOAgent:
             return []
         return list(client.dataset(run["defaultDatasetId"]).iterate_items())
 
-    def _company_matches(self, target: str, scraped: Optional[str]) -> bool:
-        if not scraped:
+    def _company_matches(
+        self,
+        target_name: str,
+        scraped_name: Optional[str],
+        target_url: Optional[str] = None,
+        scraped_url: Optional[str] = None,
+    ) -> bool:
+        # Layer 1: slug compare from LinkedIn URLs is authoritative when available.
+        t_slug = self._company_slug(target_url) if target_url else None
+        s_slug = self._company_slug(scraped_url) if scraped_url else None
+        if t_slug and s_slug:
+            return t_slug == s_slug
+
+        # Layer 2: name-token matching with significant-overlap fallback.
+        if not scraped_name:
             return False
-        t_tokens = _normalize_company(target)
-        s_tokens = _normalize_company(scraped)
-        return bool(t_tokens) and t_tokens.issubset(s_tokens)
+        t_tokens = _normalize_company(target_name)
+        s_tokens = _normalize_company(scraped_name)
+        if not t_tokens:
+            return False
+        if t_tokens.issubset(s_tokens):
+            return True
+        # Brand vs legal-name divergence (e.g. "Carl Zeiss Ag" vs "ZEISS Group"):
+        # accept if any distinctive token (≥5 chars) appears in the scraped name.
+        significant = {t for t in t_tokens if len(t) >= 5}
+        return bool(significant) and bool(significant & s_tokens)
+
+    def _company_slug(self, url: Optional[str]) -> Optional[str]:
+        if not url or 'linkedin.com/company/' not in url:
+            return None
+        try:
+            parts = urlparse(url).path.strip('/').split('/')
+        except Exception:
+            return None
+        if len(parts) >= 2 and parts[0] == 'company' and parts[1]:
+            return parts[1].lower()
+        return None
+
+    def _extract_scraped_company_url(self, item: dict[str, Any]) -> Optional[str]:
+        direct = self._pick(
+            item,
+            "currentCompanyUrl", "currentCompanyLinkedinUrl",
+            "companyUrl", "companyLinkedinUrl",
+        )
+        if isinstance(direct, str) and 'linkedin.com/company/' in direct:
+            return direct
+
+        current = item.get("currentCompany")
+        if isinstance(current, dict):
+            for key in ("url", "linkedinUrl", "linkedin", "companyUrl"):
+                value = current.get(key)
+                if isinstance(value, str) and 'linkedin.com/company/' in value:
+                    return value
+
+        experience = item.get("experience") or item.get("experiences")
+        if isinstance(experience, list) and experience:
+            first = experience[0]
+            if isinstance(first, dict):
+                for key in ("companyLinkedinUrl", "companyUrl", "url", "linkedinUrl"):
+                    value = first.get(key)
+                    if isinstance(value, str) and 'linkedin.com/company/' in value:
+                        return value
+                nested = first.get("company")
+                if isinstance(nested, dict):
+                    for key in ("url", "linkedinUrl", "linkedin"):
+                        value = nested.get(key)
+                        if isinstance(value, str) and 'linkedin.com/company/' in value:
+                            return value
+        return None
 
     def _pick(self, item: dict[str, Any], *keys: str) -> Optional[Any]:
         for key in keys:
