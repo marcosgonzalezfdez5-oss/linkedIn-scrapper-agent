@@ -58,6 +58,11 @@ Create a `key.env` file in the project root:
 
 ```
 PARALLEL_API_KEY=your_key_here
+APIFY_TOKEN=your_key_here
+SUPABASE_URL=your_url_here
+#SUPABASE_KEY= your_key_here
+APIFY_COMPANY_ACTOR_ID=your_id_here
+APIFY_PROFILE_ACTOR_ID=your_id_here
 ```
 
 Or set it as an environment variable:
