@@ -14,6 +14,7 @@ from company_intel_agent.agents.linkedin_ceo_agent import LinkedInCEOAgent
 from company_intel_agent.agents.news_agent import NewsAgent
 from company_intel_agent.models.schemas import CEOData, CompanyIntelligence
 from company_intel_agent.config import settings
+from company_intel_agent.utils.llm_client import build_llm_client
 from company_intel_agent.utils.logger import get_logger
 from company_intel_agent.utils.names import extract_ceo_name_from_results
 from company_intel_agent.utils.search import ParallelSearchClient
@@ -30,10 +31,11 @@ def _urls_equivalent(a: str, b: str) -> bool:
 
 class OrchestratorAgent:
     def __init__(self):
-        self._apify_company_agent = ApifyCompanyAgent()
-        self._apify_ceo_agent = ApifyCEOAgent()
-        self._company_agent = LinkedInCompanyAgent()
-        self._ceo_agent = LinkedInCEOAgent()
+        llm = build_llm_client()
+        self._apify_company_agent = ApifyCompanyAgent(llm)
+        self._apify_ceo_agent = ApifyCEOAgent(llm)
+        self._company_agent = LinkedInCompanyAgent(llm)
+        self._ceo_agent = LinkedInCEOAgent(llm)
         self._news_agent = NewsAgent()
 
     async def run(self, company_name: str) -> dict:

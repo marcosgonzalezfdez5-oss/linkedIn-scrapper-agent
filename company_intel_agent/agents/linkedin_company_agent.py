@@ -4,8 +4,9 @@ from typing import Optional
 from urllib.parse import urlparse
 
 from company_intel_agent.models.schemas import CompanyData
+from company_intel_agent.utils.llm_client import LLMClient
 from company_intel_agent.utils.search import ParallelSearchClient, SearchResult
-from company_intel_agent.utils.verifier import WebsiteVerifier
+from company_intel_agent.agents.company_verifier_agent import CompanyVerifierAgent
 from company_intel_agent.utils.names import extract_ceo_name_from_results
 from company_intel_agent.utils.logger import get_logger
 
@@ -22,9 +23,9 @@ _NOISE_DOMAINS = {'linkedin.com', 'facebook.com', 'twitter.com', 'x.com',
 
 
 class LinkedInCompanyAgent:
-    def __init__(self):
+    def __init__(self, llm: LLMClient):
         self._search = ParallelSearchClient()
-        self._website_verifier = WebsiteVerifier()
+        self._verifier = CompanyVerifierAgent(llm, self._search)
 
     async def find(self, company_name: str) -> tuple[CompanyData, Optional[str]]:
         logger.info(f"Searching company intelligence for: '{company_name}'")
@@ -73,24 +74,25 @@ class LinkedInCompanyAgent:
         description = self._extract_description(meta_res + linkedin_res, company_name)
         size = self._extract_size(size_res + meta_res)
 
-        # Verify and correct the website independently of other extractions
-        site_result = await self._website_verifier.verify(company_name, raw_website)
-        if site_result.url != raw_website:
+        # Verify and correct website + find LinkedIn if missing
+        site_result = await self._verifier.verify(company_name, raw_website)
+        if site_result.website != raw_website:
             logger.info(
-                f"Website corrected: '{raw_website}' -> '{site_result.url}' "
-                f"(confidence={site_result.confidence})"
+                f"Website corrected: '{raw_website}' -> '{site_result.website}' "
+                f"(confidence={site_result.website_confidence})"
             )
 
+        resolved_linkedin = linkedin_url or site_result.linkedin
         logger.info(
-            f"Company result — linkedin={linkedin_url}, website={site_result.url} "
-            f"[{site_result.confidence}], ceo={ceo_name}, size={size}"
+            f"Company result — linkedin={resolved_linkedin}, website={site_result.website} "
+            f"[{site_result.website_confidence}], ceo={ceo_name}, size={size}"
         )
 
         company_data = CompanyData(
             name=company_name,
-            linkedin=linkedin_url,
-            website=site_result.url,
-            website_confidence=site_result.confidence,
+            linkedin=resolved_linkedin,
+            website=site_result.website,
+            website_confidence=site_result.website_confidence,
             description=description,
             size=size,
         )

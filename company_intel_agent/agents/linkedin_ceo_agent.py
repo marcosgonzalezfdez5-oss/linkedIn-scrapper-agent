@@ -4,8 +4,9 @@ from typing import Optional
 from urllib.parse import urlparse
 
 from company_intel_agent.models.schemas import CEOData
+from company_intel_agent.utils.llm_client import LLMClient
 from company_intel_agent.utils.search import ParallelSearchClient, SearchResult
-from company_intel_agent.utils.verifier import CEOVerifier
+from company_intel_agent.agents.ceo_verifier_agent import CEOVerifierAgent
 from company_intel_agent.utils.logger import get_logger
 
 logger = get_logger("CEOLinkedInAgent")
@@ -19,9 +20,9 @@ _LINKEDIN_PROFILE_PATTERN = re.compile(r'https?://(?:[a-z]{2,3}\.)?linkedin\.com
 
 
 class LinkedInCEOAgent:
-    def __init__(self):
+    def __init__(self, llm: LLMClient):
         self._search = ParallelSearchClient()
-        self._verifier = CEOVerifier()
+        self._verifier = CEOVerifierAgent(llm, self._search)
 
     async def find(self, ceo_name: str, company_name: str) -> CEOData:
         logger.info(f"Searching LinkedIn profile for CEO: '{ceo_name}' at '{company_name}'")

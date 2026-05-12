@@ -4,3 +4,5 @@ pydantic>=2.0.0
 requests>=2.31.0
 beautifulsoup4>=4.12.0
 supabase>=2.0.0
+google-generativeai>=0.5.0  # for LLM_PROVIDER=gemini
+# openai>=1.0.0             # for LLM_PROVIDER=azure

@@ -38,3 +38,9 @@ APIFY_COMPANY_ACTOR_ID: str = _get('APIFY_COMPANY_ACTOR_ID')
 APIFY_PROFILE_ACTOR_ID: str = _get('APIFY_PROFILE_ACTOR_ID') 
 APIFY_COMPANY_INPUT_FIELD: str = _get('APIFY_COMPANY_INPUT_FIELD') or 'companyUrls'
 APIFY_PROFILE_INPUT_FIELD: str = _get('APIFY_PROFILE_INPUT_FIELD') or 'profileUrls'
+
+# LLM provider for AI verifier agents ("gemini" or "azure")
+LLM_PROVIDER: str = _get('LLM_PROVIDER') or 'gemini'
+LLM_API_KEY: str = _get('LLM_API_KEY')
+LLM_MODEL: str = _get('LLM_MODEL') or ''
+LLM_ENDPOINT: str = _get('LLM_ENDPOINT') or ''  # Azure OpenAI endpoint only
